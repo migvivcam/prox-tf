@@ -1,0 +1,34 @@
+- name: Instalar y configurar Apache2 en Ubuntu 22.04
+  hosts: proxmox_vms
+  become: true
+
+  tasks:
+
+    - name: Asegurar que apache2 está instalado
+      apt:
+        name: apache2
+        state: present
+        update_cache: yes
+
+    - name: Asegurar que apache2 está habilitado y en ejecución
+      service:
+        name: apache2
+        state: started
+        enabled: true
+
+    - name: Copiar archivo index.html personalizado (opcional)
+      copy:
+        src: files/index.html
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: Abrir el puerto 80 en UFW (si se usa UFW)
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+      when: ansible_facts['distribution'] == "Ubuntu"
+
+

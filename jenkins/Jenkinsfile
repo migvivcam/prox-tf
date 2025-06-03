@@ -1,0 +1,356 @@
+pipeline {
+    agent any
+    environment {
+        // Variables de entorno para Terraform
+        TF_VAR_proxmox_api_url = credentials('proxmox-api-url')
+        TF_VAR_proxmox_user = credentials('proxmox-user')
+        TF_VAR_proxmox_password = credentials('proxmox-password')
+        TF_VAR_proxmox_node = "${params.PROXMOX_NODE}"
+        
+        // Configuración de Terraform
+        TF_IN_AUTOMATION = 'true'
+        TF_INPUT = 'false'
+        TF_CLI_ARGS = '-no-color'
+        
+        // Variables para la Pipeline
+        TF_DIR = '/home/ubuntu/Escritorio/Prox'
+    }
+    
+    parameters {
+        choice(
+            name: 'ACTION',
+            choices: ['plan', 'apply', 'destroy'],
+            description: 'Acción de Terraform a ejecutar'
+        )
+        string(
+            name: 'PROXMOX_NODE',
+            defaultValue: 'prox',
+            description: 'Nodo de Proxmox donde crear las VMs'
+        )
+        string(
+            name: 'VM_COUNT',
+            defaultValue: '1',
+            description: 'Número de VMs a crear'
+        )
+        booleanParam(
+            name: 'AUTO_APPROVE',
+            defaultValue: false,
+            description: 'Aplicar cambios automáticamente sin aprobación manual'
+        )
+    }
+    
+    stages {
+        stage('🔄 Checkout') {
+            steps {
+                script {
+                    echo "🚀 Iniciando pipeline para ${params.ACTION} en nodo ${params.PROXMOX_NODE}"
+                }
+                    dir("${TF_DIR}"){
+                    }
+            }
+        }
+        
+        stage('🔧 Setup Terraform') {
+            steps {
+                script {
+                    echo "🛠️ Configurando Terraform..."
+                }
+                dir("${TF_DIR}"){
+                // Verificar versión de Terraform
+                sh '''
+                    terraform version
+                    echo "📂 Directorio de trabajo: $(pwd)"
+                    ls -la
+                '''
+                
+                // Inicializar Terraform
+                sh '''
+                    echo "🔄 Inicializando Terraform..."
+                    terraform init -upgrade
+                '''
+            }}
+        }
+        
+        stage('✅ Validate') {
+            steps {
+                dir("${TF_DIR}"){
+                echo "🔍 Validando configuración de Terraform..."
+                
+                // Validar sintaxis
+                sh 'terraform validate'
+                
+                // Formatear código (opcional)
+                sh 'terraform fmt -check=true -diff=true'
+                
+                echo "✅ Validación completada exitosamente"
+                }
+            }
+        }
+        
+        stage('📋 Plan') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'plan' }
+                    expression { params.ACTION == 'apply' }
+                }
+            }
+            steps {
+                dir("${TF_DIR}"){
+                script {
+                    echo "📊 Generando plan de Terraform..."
+                    
+                    // Generar plan
+                    sh '''
+                        terraform plan \
+                            -var="vm_count=${VM_COUNT}" \
+                            -out=tfplan
+                    '''
+                            //
+                            //-detailed-exitcode
+                    
+                    // Mostrar resumen del plan
+                    sh 'terraform show -no-color tfplan > plan_output.txt'
+                    
+                    // Archivar el plan para referencia
+                    archiveArtifacts artifacts: 'plan_output.txt', fingerprint: true
+                    
+                    echo "📋 Plan generado y guardado"
+                }
+                }
+            }
+        }
+        
+        stage('🚦 Approval') {
+            when {
+                allOf {
+                    expression { params.ACTION == 'apply' }
+                    expression { params.AUTO_APPROVE == false }
+                }
+            }
+            steps {
+                dir("${TF_DIR}"){
+                script {
+                    echo "⏳ Esperando aprobación manual..."
+                    
+                    // Mostrar resumen antes de la aprobación
+                    sh 'terraform show -no-color tfplan | head -50'
+                    
+                    // Solicitar aprobación
+                    input message: '¿Deseas aplicar estos cambios en Proxmox?', 
+                          ok: '✅ Aplicar cambios',
+                          submitterParameter: 'APPROVER'
+                    
+                    echo "✅ Cambios aprobados por: ${env.APPROVER}"
+                }
+                }
+            }
+        }
+        
+        stage('🚀 Apply') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
+            steps {
+                dir("${TF_DIR}"){
+                script {
+                    echo "🔥 Aplicando cambios en Proxmox..."
+                    
+                    // Aplicar el plan
+                    sh 'terraform apply tfplan'
+                    
+                    // Guardar outputs
+                    sh 'terraform output -json > terraform_outputs.json'
+                    
+                    // Archivar outputs
+                    archiveArtifacts artifacts: 'terraform_outputs.json', fingerprint: true
+                    
+                    echo "🎉 Aplicación completada exitosamente"
+                }
+                }
+            }
+        }
+        
+        stage('💥 Destroy') {
+            when {
+                expression { params.ACTION == 'destroy' }
+            }
+            steps {
+                dir("${TF_DIR}"){
+                script {
+                    echo "⚠️ Preparando para destruir infraestructura..."
+                    
+                    // Mostrar qué se va a destruir
+                    sh 'terraform plan -destroy -var="vm_count=${VM_COUNT}"'
+                    
+                    // Solicitar confirmación adicional para destroy
+                    input message: '⚠️ ¿CONFIRMAS que quieres DESTRUIR la infraestructura?', 
+                          ok: '💥 SÍ, DESTRUIR',
+                          submitterParameter: 'DESTROYER'
+                    
+                    echo "💥 Destrucción autorizada por: ${env.DESTROYER}"
+                    
+                    // Ejecutar destroy
+                    sh 'terraform destroy -var="vm_count=${VM_COUNT}" -auto-approve'
+                    
+                    echo "🗑️ Infraestructura destruida"
+                    }
+                }
+            }
+        }
+        
+        stage('🔍 Verify VMs') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
+            steps {
+                dir("${TF_DIR}"){
+                script {
+                    echo "🔍 Verificando estado de las VMs..."
+                    
+                    // Obtener IPs de las VMs creadas
+                    def vmIps = sh(
+                        returnStdout: true, 
+                        script: 'terraform output -json | jq -r ".vm_info.value[].ip_address"'
+                    ).trim().split('\n')
+                    
+                    echo "🖥️ VMs creadas con IPs: ${vmIps.join(', ')}"
+                    
+                    // Verificar conectividad SSH (opcional)
+                    for (ip in vmIps) {
+                        sh """
+                            echo "🔗 Verificando conectividad con ${ip}..."
+                            timeout 30 bash -c 'nc -z ${ip} 22; sleep 2'
+                            echo "✅ VM ${ip} está accesible por SSH"
+                        """
+                    }
+                }
+                }
+            }
+        }
+
+        stage('🔍 Ansible - Playbook') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
+            steps {
+                dir("${TF_DIR}"){
+                    sh 'sleep 15'
+                    ansiblePlaybook installation: 'ansible', inventory: 'ansible_inventory.ini', playbook: 'apache2.yaml'
+                }
+            }
+        }
+        
+        stage('📊 Generate Report') {
+            steps {
+                script {
+                    echo "📊 Generando reporte de la ejecución..."
+                    
+                    // Crear reporte HTML
+                    sh '''
+                        cat > deployment_report.html << EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reporte de Despliegue Proxmox</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { color: green; }
+        .info { color: blue; }
+        .warning { color: orange; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Reporte de Despliegue</h1>
+    <p><strong>Acción:</strong> ${ACTION}</p>
+    <p><strong>Nodo Proxmox:</strong> ${PROXMOX_NODE}</p>
+    <p><strong>Cantidad de VMs:</strong> ${VM_COUNT}</p>
+    <p><strong>Build:</strong> ${BUILD_NUMBER}</p>
+    <p><strong>Fecha:</strong> $(date)</p>
+    <h2>Estado: <span class="success">✅ EXITOSO</span></h2>
+</body>
+</html>
+EOF
+                    '''
+                    
+                    // Publicar reporte HTML
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: '.',
+                        reportFiles: 'deployment_report.html',
+                        reportName: 'Reporte de Despliegue'
+                    ])
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            dir("${TF_DIR}"){
+            echo "🧹 Limpiando workspace..."
+            
+            // Limpiar archivos temporales
+            sh '''
+                rm -f tfplan
+                rm -f plan_output.txt
+                ls -la
+            '''
+            
+            // Archivar logs de Terraform
+            archiveArtifacts artifacts: '*.log', allowEmptyArchive: true
+            }
+        }
+        
+        success {
+            echo "🎉 Pipeline ejecutado exitosamente!"
+            
+            // Notificación de éxito (Slack, email, etc.)
+            script {
+                if (params.ACTION == 'apply') {
+                    def vmCount = params.VM_COUNT
+                    def message = "✅ Despliegue exitoso: ${vmCount} VM(s) creada(s) en Proxmox nodo ${params.PROXMOX_NODE}"
+                    
+                    // Ejemplo de notificación por Slack
+                    // slackSend(channel: '#devops', color: 'good', message: message)
+                    
+                    echo message
+                }
+            }
+        }
+        
+        failure {
+            dir("${TF_DIR}"){
+            echo "❌ Pipeline falló!"
+            
+            // Notificación de fallo
+            script {
+                def message = "❌ Fallo en el despliegue de Proxmox - Build #${BUILD_NUMBER}"
+                
+                // Ejemplo de notificación por Slack
+                // slackSend(channel: '#devops', color: 'danger', message: message)
+                
+                echo message
+            }
+            
+            // Cleanup en caso de fallo durante apply
+            script {
+                if (params.ACTION == 'apply' && fileExists('tfplan')) {
+                    echo "🧹 Limpiando recursos parcialmente creados..."
+                    // sh 'terraform destroy -auto-approve' // Descomenta si quieres cleanup automático
+                }
+            }
+            }
+        }
+        
+        unstable {
+            echo "⚠️ Pipeline completado con warnings"
+        }
+        
+        cleanup {
+            // Limpiar workspace al final
+            cleanWs()
+        }
+    }
+}
