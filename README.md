@@ -48,7 +48,7 @@ prox-tf/
 
 > ⚠️ Los archivos del repositorio son de un entorno de pruebas, con parametros por defecto y placeholders.
 
-> ⚠️ Este repositorio utiliza Cloud-Init y plantillas de proxmox para la creación de MV mediante Terraform.
+> Este repositorio utiliza Cloud-Init y plantillas de proxmox para la creación de MV mediante Terraform.
 
 ![cloud ready template](./imgs/01-Template.png)
 
@@ -75,7 +75,7 @@ terraform apply
 
 ## 3. Automatización con Ansible
 
-> ⚠️ El codigo de terraform crea automaticamente el inventario de Ansible, con una configuración correcta solo se tiene que indicar el playbook.
+> El codigo de terraform crea automaticamente el inventario de Ansible, con una configuración correcta solo se tiene que indicar el playbook.
 
 ![terraform ansible inventory](./imgs/03-tfPlan.png)
 
@@ -178,10 +178,10 @@ La pipeline exitosa pasa el proceso de actualización, planificación, creación
 
 ## 5. TODO
 
-> La prioridad es la securización y el funcionamiento del codigo OOTB.
+> Con el objetivo de aumentar la securización y el funcionamiento del codigo OOTB.
 
 1. Mejorar la integración de Terraform en Jenkins.
-    1.1. Añadir parametros configurables de tfvars.
+    1. Añadir parametros configurables de tfvars.
 2. Configurar terraform para utilizar la estructura del repositorio.
 3. Convertir Jenkinsfile y la pipeline a un script SCM.
 
