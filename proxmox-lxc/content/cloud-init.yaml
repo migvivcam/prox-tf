@@ -1,0 +1,13 @@
+#cloud-config
+hostname: ${hostname}
+users:
+  - name: terraform
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+
+package_update: true
+package_upgrade: true
+
+runcmd:
+  - echo "LXC configurado con Cloud-init"

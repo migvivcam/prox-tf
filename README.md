@@ -13,6 +13,7 @@ prox-tf/
 ├── imgs/           # Imágenes y capturas usadas en la documentación
 ├── jenkins/        # Archivos relacionados con la pipeline de Jenkins
 ├── terraform/      # Código de infraestructura como código para Proxmox
+├── proxmox-lxc     # Código con el contenido para la creación de contenedores de linux con Terraform
 └── README.md       # Documentación del proyecto
 ```
 
@@ -186,6 +187,37 @@ La pipeline exitosa pasa el proceso de actualización, planificación, creación
 3. Convertir Jenkinsfile y la pipeline a un script SCM.
 
 ---
+
+
+# CREACIÓN DE CONTENEDORES DE LINUX (LXC)
+
+## 1. Configuración previa en Proxmox
+
+Antes de proceder, nos hemos creado un usuario llamado "terraform" con los permisos necesarios para poder crear LXC mediante la implementación de Terraform.
+
+![img1](./proxmox-lxc/images/1.png)
+![img1](./proxmox-lxc/images/2.png)
+![img1](./proxmox-lxc/images/3.png)
+
+## 2. Descarga plantilla a implementar
+
+El siguiente paso, ha sido la descarga de la plantilla que vamos a implementar para la automatización, que en este caso, ha sido la distro Alpine.
+
+![img1](./proxmox-lxc/images/4.png)
+
+## 3. Puesta en marcha
+
+Una vez tengamos realizada la configuración de los archivos para la creación de contenedores, es momento de ejecutar terraform para que se encargue del proceso de creación. 
+
+![img1](./proxmox-lxc/images/5.png)
+![img1](./proxmox-lxc/images/6.png)
+![img1](./proxmox-lxc/images/7.png)
+
+## 4. Acceso al equipo.
+
+Una vez creado el contenedor, podemos observar que tenemos acceso al mismo.
+
+![img1](./proxmox-lxc/images/8.png)
 
 ## Autores
 
