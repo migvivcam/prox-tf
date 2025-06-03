@@ -1,0 +1,28 @@
+# Configuración de Proxmox
+proxmox_api_url      = "https://example_ip:8006/api2/json"
+proxmox_user         = "example@pve"
+proxmox_password     = "example"
+proxmox_tls_insecure = true
+
+# Configuración del nodo y template
+target_node   = "example"
+template_name = "example"
+
+# Configuración de VMs
+vm_count       = 5
+vm_name_prefix = "placeholder"
+vm_memory      = 512
+vm_cores       = 1
+vm_disk_size   = "10G"
+
+# Configuración de red
+network_bridge = "vmbr0"
+ip_base        = "192.168.1"
+ip_start       = 150
+gateway        = "192.168.1.1"
+dns_servers    = "8.8.8.8,8.8.4.4"
+
+# Usuario y SSH
+default_user     = "example"
+default_password = "example"
+ssh_public_key   = "example"
